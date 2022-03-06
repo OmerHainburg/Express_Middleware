@@ -1,130 +1,96 @@
 const express = require('express');
 const app = express();
+const morgan = require('morgan');
+const bodyParser = require('body-parser');
 
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 4001;
 
-const jellybeanBag = {
-  mystery: {
-    number: 4
+const cards = [
+  {
+    id: 1,
+    suit: 'Clubs',
+    rank: '2'
   },
-  lemon: {
-    number: 5
+  {
+    id: 2,
+    suit: 'Diamonds',
+    rank: 'Jack'
   },
-  rootBeer: {
-    number: 25
-  },
-  cherry: {
-    number: 3
-  },
-  licorice: {
-    number: 1
+  {
+    id: 3,
+    suit: 'Hearts',
+    rank: '10'
   }
+];
+let nextId = 4;
+
+// Logging
+if (!process.env.IS_TEST_ENV) {
+  app.use(morgan('short'));
+}
+
+// Parsing
+app.use(bodyParser.json());
+
+// Find card
+app.use('/cards/:cardId', (req, res, next) => {
+  const cardId = Number(req.params.cardId);
+  const cardIndex = cards.findIndex(card => card.id === cardId);
+  if (cardIndex === -1) {
+    return res.status(404).send('Card not found');
+  }
+  req.cardIndex = cardIndex;
+  next();
+});
+
+const validateCard = (req, res, next) => {
+  const newCard = req.body;
+  const validSuits = ['Clubs', 'Diamonds', 'Hearts', 'Spades'];
+  const validRanks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
+  if (validSuits.indexOf(newCard.suit) === -1 || validRanks.indexOf(newCard.rank) === -1) {
+    return res.status(400).send('Invalid card!');
+  }
+  next();
 };
 
-// Logging Middleware
-app.use((req, res, next) => {
-  console.log(`${req.method} Request Received`);
-  next();
+// Get all Cards
+app.get('/cards/', (req, res, next) => {
+  res.send(cards);
 });
 
-// Add your code below:
-app.use('/beans/:beanName', (req, res, next) => {
-  const beanName = req.params.beanName;
-  if (!jellybeanBag[beanName]) {
-    console.log('Response Sent');
-    return res.status(404).send('Bean with that name does not exist');
+// Create a new Card
+app.post('/cards/', validateCard, (req, res, next) => {
+  const newCard = req.body;
+  newCard.id = nextId++;
+  cards.push(newCard);
+  res.status(201).send(newCard);
+});
+
+// Get a single Card
+app.get('/cards/:cardId', (req, res, next) => {
+  res.send(cards[req.cardIndex]);
+});
+
+// Update a Card
+app.put('/cards/:cardId', validateCard, (req, res, next) => {
+  const newCard = req.body;
+  const cardId = Number(req.params.cardId);
+  if (!newCard.id || newCard.id !== cardId) {
+    newCard.id = cardId;
   }
-  req.bean = jellybeanBag[beanName];
-  req.beanName = beanName;
-  next();
+  cards[req.cardIndex] = newCard;
+  res.send(newCard);
 });
 
-
-app.get('/beans/', (req, res, next) => {
-  res.send(jellybeanBag);
-  console.log('Response Sent');
-});
-
-app.post('/beans/', (req, res, next) => {
-  let bodyData = '';
-  req.on('data', (data) => {
-    bodyData += data;
-  });
-
-  req.on('end', () => {
-    const body = JSON.parse(bodyData);
-    const beanName = body.name;
-    if (jellybeanBag[beanName] || jellybeanBag[beanName] === 0) {
-      return res.status(400).send('Bean with that name already exists!');
-    }
-    const numberOfBeans = Number(body.number) || 0;
-    jellybeanBag[beanName] = {
-      number: numberOfBeans
-    };
-    res.send(jellybeanBag[beanName]);
-    console.log('Response Sent');
-  });
-});
-
-app.get('/beans/:beanName', (req, res, next) => {
-  res.send(req.bean);
-  console.log('Response Sent');
-});
-
-app.post('/beans/:beanName/add', (req, res, next) => {
-  let bodyData = '';
-  req.on('data', (data) => {
-    bodyData += data;
-  });
-
-  req.on('end', () => {
-    const numberOfBeans = Number(JSON.parse(bodyData).number) || 0;
-    req.bean.number += numberOfBeans;
-    res.send(req.bean);
-    console.log('Response Sent');
-  });
-});
-
-app.post('/beans/:beanName/remove', (req, res, next) => {
-  let bodyData = '';
-  req.on('data', (data) => {
-    bodyData += data;
-  });
-
-  req.on('end', () => {
-    const numberOfBeans = Number(JSON.parse(bodyData).number) || 0;
-    if (req.bean.number < numberOfBeans) {
-      return res.status(400).send('Not enough beans in the jar to remove!');
-    }
-    req.bean.number -= numberOfBeans;
-    res.send(req.bean);
-    console.log('Response Sent');
-  });
-});
-
-app.delete('/beans/:beanName', (req, res, next) => {
-  req.bean = null;
+// Delete a Card
+app.delete('/cards/:cardId', (req, res, next) => {
+  cards.splice(req.cardIndex, 1);
   res.status(204).send();
-  console.log('Response Sent');
 });
 
-app.put('/beans/:beanName/name', (req, res, next) => {
-  let bodyData = '';
-  req.on('data', (data) => {
-    bodyData += data;
-  });
-
-  req.on('end', () => {
-    const newName = JSON.parse(bodyData).name;
-    jellybeanBag[newName] = jellybeanBag[req.beanName];
-    jellybeanBag[req.beanName] = null;
-    res.send(jellybeanBag[newName]);
-    console.log('Response Sent');
-  });
-});
-
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server is listening on port ${PORT}`);
 });
